@@ -20,16 +20,12 @@ Start the bot with `/start` and access your **Personal Trading Dashboard** with 
 - **🎯 One-Click Setup**: Connect your TradingView alerts directly to the bot
 - **⚡ Instant Execution**: Webhooks trigger immediate buy/sell orders
 - **💰 Customizable Amounts**: Set your preferred SOL trade amounts (0.1, 0.5, 1.0, 5.0 SOL)
-- **🛡️ Risk Management**: Built-in slippage protection and transaction optimization
 - **📊 Real-time Monitoring**: Live position tracking and PnL updates
-
-**Perfect for**: Traders who want to automate their TradingView strategies without manual intervention
 
 ### 🚀 **AlphaSignals AutoTrade** - Intelligent Signal Trading
 > *AI-powered contract discovery with exclusive trailing stop technology*
 
 - **🔍 Smart Signal Detection**: Automatically scans Telegram groups for Solana contract addresses
-- **🧠 AI Filtering**: Advanced algorithms identify high-potential tokens
 - **📈 Exclusive Trailing Stops**: Revolutionary liquidity-based trailing stop loss system
   - Calculates optimal stops based on entry liquidity
   - Adapts to market volatility in real-time
@@ -37,18 +33,11 @@ Start the bot with `/start` and access your **Personal Trading Dashboard** with 
 - **⚙️ Per-User Settings**: Customize position sizes, risk limits, and channel filters
 - **🛡️ Rug Protection**: Comprehensive token safety analysis before every trade
 
-**Perfect for**: Alpha hunters who want to catch the best signals with intelligent risk management
-
 ### 🏆 **Best Trades** - Market Intelligence
-> *Discover the most profitable Solana trades in real-time*
+> *Discover the most profitable Solana trades in last 24 hours*
 
-- **📊 24-Hour Winners**: Top performing tokens by ROI in the last 24 hours
-- **🎯 Smart Wallets**: Track and copy strategies from successful traders
-- **💎 Gem Discovery**: Identify emerging opportunities before they explode
-- **📈 Performance Analytics**: Detailed metrics on winning trades and strategies
-- **🔄 Live Updates**: Real-time data refresh for up-to-the-minute insights
+- **📊 24-Hour Winners**: Top single trades from wallets by ROI in the last 24 hours
 
-**Perfect for**: Traders who want to learn from the market's best performers and spot trending opportunities
 
 ### � **Wallet Setup** - Secure & Simple
 > *Military-grade wallet management through Telegram*
@@ -59,7 +48,6 @@ Start the bot with `/start` and access your **Personal Trading Dashboard** with 
 - **📱 QR Code Deposits**: Generate QR codes for easy funding
 - **🛡️ Maximum Security**: All private keys encrypted and stored locally
 
-**Perfect for**: Everyone - secure wallet setup is your gateway to automated trading
 
 ### ❓ **Help & Support** - Complete Guidance
 > *Everything you need to master the bot*
@@ -70,7 +58,7 @@ Start the bot with `/start` and access your **Personal Trading Dashboard** with 
 - **📞 Support Channels**: Direct access to help and community
 - **📖 Best Practices**: Trading tips and security recommendations
 
-**Perfect for**: New users getting started and experienced traders optimizing their setup
+
 
 ## 🚀 **Getting Started in 3 Minutes**
 
