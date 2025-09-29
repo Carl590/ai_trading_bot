@@ -1,1 +1,1 @@
-{}
+{"test_user_123": {"user_id": "test_user_123", "wallet_address": "CPoNRPQPBAG3oynhk41uZB61t9AjXhfSbBXveSm2umLn", "encrypted_private_key": "gAAAAABo2oO56w-4JZiiuPL2sVSsdWsd6oVYOiJhvPMjdwbWJ65472Jp8ZBNFezmn6aDH90HCPTjxhPJDZ6O7l9Bt6hVfXXCvfvHEkIdhWuiGyckN0dUiRrezz8nMESCZdUjOYQtW9OcsKbN4qM-DxUmIxKY6sf4rKWgkudDrBK4dHkpQS22HQk=", "wallet_name": "My Test Wallet", "created_at": "2025-09-29T15:03:53.443058", "last_used": null, "is_active": true, "balance_sol": 0.0, "total_trades": 0}}

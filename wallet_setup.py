@@ -141,8 +141,8 @@ Your private keys are encrypted and stored securely. Never share your private ke
                 parse_mode=ParseMode.MARKDOWN
             )
     
-    async def create_new_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Create a new wallet for the user"""
+    async def create_new_wallet_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Start new wallet creation - ask for wallet name first"""
         user_id = str(update.effective_user.id)
         
         # Check if user already has a wallet
@@ -150,14 +150,61 @@ Your private keys are encrypted and stored securely. Never share your private ke
             await update.callback_query.answer("You already have a wallet configured!")
             return
         
+        text = """
+🆕 **CREATE NEW WALLET**
+
+**Choose a Wallet Name**
+
+Give your new wallet a name for easy identification:
+
+**Examples:**
+• "My Trading Wallet"
+• "Main Portfolio"
+• "AI Bot Wallet"
+• "Solana Funds"
+
+**📝 Type your wallet name now:**
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ Cancel Creation", callback_data="wallet_menu")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.callback_query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Set conversation state
+        context.user_data['wallet_create_step'] = 'name'
+    
+    async def handle_wallet_create_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle wallet creation input (name)"""
+        user_id = str(update.effective_user.id)
+        wallet_name = update.message.text.strip()
+        
+        # Validate wallet name
+        if len(wallet_name) < 2 or len(wallet_name) > 50:
+            await update.message.reply_text(
+                "❌ Wallet name must be between 2 and 50 characters. Please try again:"
+            )
+            return
+        
         try:
-            # Create new wallet
-            address, backup_phrase = wallet_manager.create_new_wallet(user_id)
+            # Create new wallet with custom name
+            address, backup_phrase = wallet_manager.create_new_wallet(user_id, wallet_name)
+            
+            # Clear creation state
+            context.user_data.pop('wallet_create_step', None)
             
             # Show success message with backup info
             text = f"""
 ✅ **WALLET CREATED SUCCESSFULLY!**
 
+**💼 Wallet Name:** {wallet_name}
 **🏦 Wallet Address:**
 `{address}`
 
@@ -185,7 +232,7 @@ Your private keys are encrypted and stored securely. Never share your private ke
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.callback_query.edit_message_text(
+            message = await update.message.reply_text(
                 text=text,
                 reply_markup=reply_markup,
                 parse_mode=ParseMode.MARKDOWN
@@ -197,13 +244,13 @@ Your private keys are encrypted and stored securely. Never share your private ke
                 300,  # 5 minutes
                 data={
                     'chat_id': update.effective_chat.id,
-                    'message_id': update.callback_query.message.message_id
+                    'message_id': message.message_id
                 }
             )
             
         except Exception as e:
             logger.error(f"Error creating wallet: {e}")
-            await update.callback_query.edit_message_text(
+            await update.message.reply_text(
                 "❌ Error creating wallet. Please try again later.",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔙 Back", callback_data="wallet_menu")
@@ -211,11 +258,64 @@ Your private keys are encrypted and stored securely. Never share your private ke
             )
     
     async def import_wallet_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Start wallet import process"""
+        """Start wallet import process - ask for wallet name first"""
         text = """
 📥 **IMPORT EXISTING WALLET**
 
-Send your private key in one of these formats:
+**Step 1: Choose a Wallet Name**
+
+First, give your wallet a name for easy identification:
+
+**Examples:**
+• "My Main Wallet"
+• "Trading Wallet"
+• "Solana Portfolio"
+• "DeFi Wallet"
+
+**📝 Type your wallet name now:**
+        """
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ Cancel Import", callback_data="wallet_menu")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.callback_query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Set conversation state
+        context.user_data['wallet_import_step'] = 'name'
+    
+    async def handle_wallet_import_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle wallet import input (name or private key)"""
+        import_step = context.user_data.get('wallet_import_step')
+        
+        if import_step == 'name':
+            # User is providing wallet name
+            wallet_name = update.message.text.strip()
+            
+            # Validate wallet name
+            if len(wallet_name) < 2 or len(wallet_name) > 50:
+                await update.message.reply_text(
+                    "❌ Wallet name must be between 2 and 50 characters. Please try again:"
+                )
+                return
+            
+            # Store wallet name and move to private key step
+            context.user_data['import_wallet_name'] = wallet_name
+            context.user_data['wallet_import_step'] = 'private_key'
+            
+            # Ask for private key
+            text = f"""
+📥 **IMPORT WALLET: {wallet_name}**
+
+**Step 2: Private Key**
+
+Now send your private key in one of these formats:
 
 **🔢 Array Format:**
 `[123,45,67,89,...]`
@@ -232,48 +332,45 @@ Send your private key in one of these formats:
 • Never share your private key publicly
 
 **Send your private key now:**
-        """
-        
-        keyboard = [
-            [InlineKeyboardButton("❌ Cancel Import", callback_data="wallet_menu")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        # Set conversation state
-        context.user_data['wallet_import'] = True
-    
-    async def handle_private_key_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle private key input for import"""
-        if not context.user_data.get('wallet_import'):
-            return
-        
-        user_id = str(update.effective_user.id)
-        private_key = update.message.text.strip()
-        
-        # Delete the message immediately for security
-        try:
-            await update.message.delete()
-        except:
-            pass
-        
-        try:
-            # Import the wallet
-            address = wallet_manager.import_wallet(user_id, private_key)
+            """
             
-            # Clear import state
-            context.user_data['wallet_import'] = False
+            keyboard = [
+                [InlineKeyboardButton("❌ Cancel Import", callback_data="wallet_menu")]
+            ]
             
-            # Show success message
-            text = f"""
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        elif import_step == 'private_key':
+            # User is providing private key
+            user_id = str(update.effective_user.id)
+            private_key = update.message.text.strip()
+            wallet_name = context.user_data.get('import_wallet_name', 'Imported Wallet')
+            
+            # Delete the message immediately for security
+            try:
+                await update.message.delete()
+            except:
+                pass
+            
+            try:
+                # Import the wallet with the custom name
+                address = wallet_manager.import_wallet(user_id, private_key, wallet_name)
+                
+                # Clear import state
+                context.user_data.pop('wallet_import_step', None)
+                context.user_data.pop('import_wallet_name', None)
+                
+                # Show success message
+                text = f"""
 ✅ **WALLET IMPORTED SUCCESSFULLY!**
 
+**💼 Wallet Name:** {wallet_name}
 **🏦 Wallet Address:**
 `{address}`
 
@@ -283,37 +380,38 @@ Your wallet is now ready for trading with the AI bot!
 • Your private key has been encrypted and stored securely
 • Original private key has been deleted from memory
 • You can now use this wallet for all trading operations
-            """
-            
-            keyboard = [
-                [InlineKeyboardButton("💰 View Wallet Dashboard", callback_data="wallet_dashboard")],
-                [InlineKeyboardButton("🔙 Back to Menu", callback_data="main_menu")]
-            ]
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            # Send success message
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
-            )
-            
-        except Exception as e:
-            logger.error(f"Error importing wallet: {e}")
-            
-            # Clear import state
-            context.user_data['wallet_import'] = False
-            
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Error importing wallet. Please check your private key format and try again.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔄 Try Again", callback_data="wallet_import"),
-                    InlineKeyboardButton("🔙 Back", callback_data="wallet_menu")
-                ]])
-            )
+                """
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 View Wallet Dashboard", callback_data="wallet_dashboard")],
+                    [InlineKeyboardButton("🔙 Back to Menu", callback_data="main_menu")]
+                ]
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                # Send success message
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+            except Exception as e:
+                logger.error(f"Error importing wallet: {e}")
+                
+                # Clear import state
+                context.user_data.pop('wallet_import_step', None)
+                context.user_data.pop('import_wallet_name', None)
+                
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="❌ Error importing wallet. Please check your private key format and try again.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔄 Try Again", callback_data="wallet_import"),
+                        InlineKeyboardButton("🔙 Back", callback_data="wallet_menu")
+                    ]])
+                )
     
     async def generate_deposit_qr(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Generate QR code for wallet deposit"""

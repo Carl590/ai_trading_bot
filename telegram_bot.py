@@ -32,6 +32,9 @@ from wallet_setup import WalletSetupHandler
 # Import the comprehensive API manager
 from api_manager import api_manager, APIConfig
 
+# Import AlphaSignals AutoTrade
+from alphsignals_autotrade import get_autotrade_manager
+
 # Global bot instance for contract alerts
 _global_bot_instance = None
 
@@ -110,6 +113,9 @@ class TelegramTradingBot:
         
         # Initialize wallet handler
         self.wallet_handler = WalletSetupHandler(self)
+        
+        # Initialize autotrade handler
+        self.autotrade_manager = None
         
         # Store global reference for scraper alerts
         _global_bot_instance = self
@@ -222,6 +228,7 @@ Choose an option below:
         
         keyboard = [
             [InlineKeyboardButton("🤖 AI Trading Bot", callback_data="ai_trading")],
+            [InlineKeyboardButton("🤖 AlphaSignals AutoTrade", callback_data="alpha_autotrade")],
             [InlineKeyboardButton("🏆 Best Trades", callback_data="best_trades")],
             [InlineKeyboardButton("👛 Wallet Manager", callback_data="wallet_menu")],
             [InlineKeyboardButton("🔍 Contract Scraper", callback_data="scraper_menu")],
@@ -459,8 +466,10 @@ Choose an option below:
         elif data == "wallet_menu":
             await self.wallet_handler.show_wallet_menu(update, context)
         elif data == "wallet_create_new":
-            await self.wallet_handler.create_new_wallet(update, context)
+            await self.wallet_handler.create_new_wallet_start(update, context)
         elif data == "wallet_import":
+            await self.wallet_handler.import_wallet_start(update, context)
+        elif data == "import_wallet":
             await self.wallet_handler.import_wallet_start(update, context)
         elif data == "wallet_dashboard":
             await self.wallet_handler.show_wallet_dashboard(update, context)
@@ -472,6 +481,10 @@ Choose an option below:
             await self.wallet_handler.show_wallet_help(update, context)
         elif data.startswith("wallet_qr_"):
             await self.wallet_handler.generate_deposit_qr(update, context)
+        elif data == "alpha_autotrade":
+            await self.show_alpha_autotrade(update, context)
+        elif data.startswith("auto_"):
+            await self.handle_autotrade_callback(update, context)
         elif data == "help":
             await self.show_help(update, context)
         elif data == "scraper_menu":
@@ -482,10 +495,6 @@ Choose an option below:
             await self.toggle_ai_trading(update, context, True)
         elif data == "stop_ai":
             await self.toggle_ai_trading(update, context, False)
-        elif data == "import_wallet":
-            await self.request_wallet_import(update, context)
-        elif data == "generate_wallet":
-            await self.generate_new_wallet(update, context)
         else:
             await query.edit_message_text("🔧 Feature coming soon!")
     
@@ -512,114 +521,17 @@ Choose an option below:
             ]])
         )
     
-    async def request_wallet_import(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Request wallet private key for import"""
-        text = """
-📥 **IMPORT WALLET** 📥
-
-Please send your wallet's private key in one of these formats:
-
-1️⃣ **Base58 format:** (Phantom/Solflare export)
-2️⃣ **JSON Array:** [1,2,3,4,5...] (Solana CLI format)
-3️⃣ **Hex format:** 0x1a2b3c4d5e...
-
-⚠️ **SECURITY WARNING:**
-• This message will be automatically deleted
-• Private keys are stored securely locally
-• Never share your private key with others
-
-Send your private key now:
-        """
-        
-        context.user_data['awaiting_wallet_import'] = True
-        
-        keyboard = [
-            [InlineKeyboardButton("❌ Cancel", callback_data="wallet_setup")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-    
-    async def generate_new_wallet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Generate a new Solana wallet"""
-        user_id = update.effective_user.id
-        
-        # Generate new keypair
-        new_wallet = Keypair()
-        self.user_wallets[user_id] = new_wallet
-        
-        # Get the private key in different formats
-        private_key_bytes = new_wallet.secret_key
-        private_key_json = list(private_key_bytes)
-        
-        text = f"""
-🆕 **NEW WALLET GENERATED** 🆕
-
-✅ Wallet successfully created and connected!
-
-**Public Address:**
-`{str(new_wallet.public_key)}`
-
-**Private Key (JSON format):**
-`{json.dumps(private_key_json)}`
-
-⚠️ **IMPORTANT:**
-• Save your private key securely
-• This is the ONLY way to recover your wallet
-• Never share it with anyone
-• Bot will delete this message in 60 seconds
-
-💰 **Next Steps:**
-1. Fund your wallet with SOL
-2. Enable AI Trading
-3. Configure TradingView webhooks
-        """
-        
-        keyboard = [
-            [InlineKeyboardButton("✅ I've Saved My Keys", callback_data="wallet_setup")],
-            [InlineKeyboardButton("🔙 Back to Wallet Setup", callback_data="wallet_setup")]
-        ]
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        message = await update.callback_query.edit_message_text(
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        # Schedule message deletion after 60 seconds for security
-        context.job_queue.run_once(
-            self.delete_message,
-            60,
-            data={'chat_id': message.chat.id, 'message_id': message.message_id}
-        )
-    
-    async def delete_message(self, context: ContextTypes.DEFAULT_TYPE):
-        """Delete a message for security purposes"""
-        job_data = context.job.data
-        try:
-            await context.bot.delete_message(
-                chat_id=job_data['chat_id'],
-                message_id=job_data['message_id']
-            )
-        except Exception as e:
-            logger.error(f"Failed to delete message: {e}")
-    
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle text messages (for wallet import, etc.)"""
-        # Check if user is importing wallet
-        if context.user_data.get('wallet_import'):
-            await self.wallet_handler.handle_private_key_input(update, context)
+        """Handle text messages (for wallet setup, etc.)"""
+        # Check if user is in wallet creation flow
+        if context.user_data.get('wallet_create_step') == 'name':
+            await self.wallet_handler.handle_wallet_create_input(update, context)
             return
         
-        if context.user_data.get('awaiting_wallet_import'):
-            await self.process_wallet_import(update, context)
+        # Check if user is in wallet import flow
+        if context.user_data.get('wallet_import_step') in ['name', 'private_key']:
+            await self.wallet_handler.handle_wallet_import_input(update, context)
+            return
         else:
             # Check if message contains trading keywords
             message_text = update.message.text.lower()
@@ -637,59 +549,7 @@ Send your private key now:
                 )
             # If not trading-related, don't respond to avoid spam
     
-    async def process_wallet_import(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Process wallet private key import"""
-        user_id = update.effective_user.id
-        private_key_text = update.message.text.strip()
-        
-        try:
-            # Delete the user's message immediately for security
-            await update.message.delete()
-            
-            # Try to parse the private key
-            if private_key_text.startswith('[') and private_key_text.endswith(']'):
-                # JSON array format
-                private_key_list = json.loads(private_key_text)
-                wallet = Keypair.from_bytes(bytes(private_key_list))
-            else:
-                # Assume base58 format
-                wallet = Keypair.from_bytes(base64.b58decode(private_key_text))
-            
-            # Store the wallet
-            self.user_wallets[user_id] = wallet
-            context.user_data['awaiting_wallet_import'] = False
-            
-            # Send success message
-            success_text = f"""
-✅ **WALLET IMPORTED SUCCESSFULLY** ✅
-
-**Address:** `{str(wallet.public_key)}`
-**Balance:** {self.trader.get_balance():.4f} SOL
-
-Your wallet is now connected and ready for trading!
-            """
-            
-            keyboard = [
-                [InlineKeyboardButton("🤖 Enable AI Trading", callback_data="ai_trading")],
-                [InlineKeyboardButton("🔙 Back to Menu", callback_data="main_menu")]
-            ]
-            
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=success_text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=ParseMode.MARKDOWN
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to import wallet: {e}")
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Invalid private key format. Please try again.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔙 Back to Wallet Setup", callback_data="wallet_setup")
-                ]])
-            )
+    
     
     async def show_scraper_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show the contract scraper menu"""
@@ -945,6 +805,53 @@ The scraper will:
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=ParseMode.MARKDOWN
         )
+    
+    async def show_alpha_autotrade(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show AlphaSignals AutoTrade dashboard"""
+        try:
+            if not self.autotrade_manager:
+                self.autotrade_manager = await get_autotrade_manager()
+            
+            await self.autotrade_manager.show_main_dashboard(update, context)
+            
+        except Exception as e:
+            logger.error(f"Error showing AlphaSignals AutoTrade: {e}")
+            await update.callback_query.edit_message_text(
+                "❌ Error loading AlphaSignals AutoTrade dashboard. Please try again.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔙 Back to Menu", callback_data="main_menu")
+                ]])
+            )
+    
+    async def handle_autotrade_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle AlphaSignals AutoTrade callbacks"""
+        try:
+            if not self.autotrade_manager:
+                self.autotrade_manager = await get_autotrade_manager()
+            
+            data = update.callback_query.data
+            user_id = update.effective_user.id
+            
+            if data.startswith("auto_toggle_"):
+                await self.autotrade_manager.handle_toggle_autotrade(update, context)
+            elif data.startswith("auto_main_"):
+                await self.autotrade_manager.show_main_dashboard(update, context)
+            elif data.startswith("auto_position_"):
+                await self.autotrade_manager.show_position_settings(update, context)
+            elif data.startswith("auto_risk_"):
+                await self.autotrade_manager.show_risk_settings(update, context)
+            else:
+                # Default fallback
+                await self.autotrade_manager.show_main_dashboard(update, context)
+                
+        except Exception as e:
+            logger.error(f"Error handling autotrade callback: {e}")
+            await update.callback_query.edit_message_text(
+                "❌ Error processing request. Please try again.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔙 Back to Menu", callback_data="main_menu")
+                ]])
+            )
 
     def run(self):
         """Start the bot"""

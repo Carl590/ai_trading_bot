@@ -1,6 +1,6 @@
 """
-Enhanced Solana Trading Engine
-Integrates with wallet manager for user wallets
+Enhanced Solana Trading Engine with AI Features
+Integrates with wallet manager, rug checker, and trailing stops
 """
 
 import asyncio
@@ -17,8 +17,13 @@ from solana.rpc.types import TxOpts
 from solana.transaction import Transaction
 import aiohttp
 
-# Import wallet manager
+# Import components
 from wallet_manager import wallet_manager
+from api_manager import api_manager, APIConfig
+
+# Import new AI features
+from rug_checker import quick_rug_check, RugCheckResult
+from trailing_stop import get_trailing_stop_manager
 
 import asyncio
 import logging
@@ -46,6 +51,19 @@ class TradeResult:
     execution_time: float = 0.0
     gas_used: Optional[int] = None
     final_amount: Optional[float] = None
+    execution_price: Optional[float] = None
+    rug_check_result: Optional[RugCheckResult] = None
+    
+@dataclass
+class TradeOptions:
+    """Options for trade execution"""
+    enable_rug_check: bool = True
+    enable_trailing_stop: bool = True
+    max_slippage_pct: float = 0.01
+    priority_fee_lamports: int = 1000
+    use_mev_protection: bool = True
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None
 
 @dataclass
 class TokenInfo:
@@ -555,6 +573,219 @@ class EnhancedTradingEngine:
         
         return health_status
     
+    async def execute_buy_with_ai(self, 
+                                 user_id: str,
+                                 token_address: str, 
+                                 amount_usd: float,
+                                 options: Optional[TradeOptions] = None) -> TradeResult:
+        """
+        Execute buy order with AI features (rug check, trailing stops)
+        """
+        if options is None:
+            options = TradeOptions()
+        
+        start_time = time.time()
+        
+        try:
+            # Get user's wallet
+            user_keypair = wallet_manager.get_user_keypair(user_id)
+            if not user_keypair:
+                return TradeResult(
+                    success=False, 
+                    error="User wallet not found. Please set up your wallet first."
+                )
+            
+            # Rug check if enabled
+            rug_result = None
+            if options.enable_rug_check:
+                logger.info(f"Running rug check for token: {token_address}")
+                rug_result = await quick_rug_check(token_address)
+                
+                if not rug_result.ok:
+                    return TradeResult(
+                        success=False,
+                        error=f"Rug check failed: {', '.join(rug_result.hard_fail_reasons)}",
+                        rug_check_result=rug_result,
+                        execution_time=time.time() - start_time
+                    )
+                
+                logger.info(f"Rug check passed: {rug_result.recommendation}")
+            
+            # Execute the buy trade
+            buy_result = await self.execute_user_trade(
+                user_id=user_id,
+                action='buy',
+                token_address=token_address,
+                amount=amount_usd,
+                slippage_bps=int(options.max_slippage_pct * 10000)
+            )
+            
+            if not buy_result.success:
+                return TradeResult(
+                    success=False,
+                    error=buy_result.error,
+                    execution_time=time.time() - start_time,
+                    rug_check_result=rug_result
+                )
+            
+            # Set up trailing stop if enabled
+            if options.enable_trailing_stop and buy_result.execution_price:
+                try:
+                    ts_manager = await get_trailing_stop_manager()
+                    await ts_manager.on_entry(
+                        user_id=user_id,
+                        token_addr=token_address,
+                        entry_price=buy_result.execution_price,
+                        trade_size_usd=amount_usd
+                    )
+                    logger.info(f"Trailing stop activated for {user_id} on {token_address}")
+                except Exception as e:
+                    logger.error(f"Failed to set up trailing stop: {e}")
+            
+            # Update stats
+            execution_time = time.time() - start_time
+            self._update_trade_stats(True, execution_time, amount_usd)
+            
+            return TradeResult(
+                success=True,
+                tx_signature=buy_result.tx_signature,
+                execution_time=execution_time,
+                execution_price=buy_result.execution_price,
+                final_amount=buy_result.final_amount,
+                rug_check_result=rug_result
+            )
+            
+        except Exception as e:
+            execution_time = time.time() - start_time
+            self._update_trade_stats(False, execution_time, amount_usd)
+            
+            logger.error(f"AI buy failed for user {user_id}: {e}")
+            return TradeResult(
+                success=False,
+                error=str(e),
+                execution_time=execution_time,
+                rug_check_result=rug_result
+            )
+    
+    async def execute_sell_with_ai(self,
+                                  user_id: str,
+                                  token_address: str,
+                                  percentage: float = 100.0,
+                                  options: Optional[TradeOptions] = None) -> TradeResult:
+        """
+        Execute sell order with AI features
+        """
+        if options is None:
+            options = TradeOptions()
+        
+        start_time = time.time()
+        
+        try:
+            # Remove trailing stop if exists
+            if options.enable_trailing_stop:
+                try:
+                    ts_manager = await get_trailing_stop_manager()
+                    await ts_manager.remove_trailing_stop(user_id, token_address)
+                    logger.info(f"Trailing stop removed for {user_id} on {token_address}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove trailing stop: {e}")
+            
+            # Execute the sell trade
+            sell_result = await self.execute_user_trade(
+                user_id=user_id,
+                action='sell',
+                token_address=token_address,
+                amount=percentage,  # Percentage to sell
+                slippage_bps=int(options.max_slippage_pct * 10000)
+            )
+            
+            execution_time = time.time() - start_time
+            
+            if sell_result.success:
+                self._update_trade_stats(True, execution_time, 0)  # No USD amount for sells
+            else:
+                self._update_trade_stats(False, execution_time, 0)
+            
+            return TradeResult(
+                success=sell_result.success,
+                tx_signature=sell_result.tx_signature,
+                error=sell_result.error,
+                execution_time=execution_time,
+                execution_price=sell_result.execution_price,
+                final_amount=sell_result.final_amount
+            )
+            
+        except Exception as e:
+            execution_time = time.time() - start_time
+            self._update_trade_stats(False, execution_time, 0)
+            
+            logger.error(f"AI sell failed for user {user_id}: {e}")
+            return TradeResult(
+                success=False,
+                error=str(e),
+                execution_time=execution_time
+            )
+    
+    async def get_token_price_and_liquidity(self, token_address: str) -> Dict[str, Any]:
+        """Get token price and liquidity info for AI features"""
+        try:
+            # Use Jupiter API to get price info
+            quote_url = self.jupiter_endpoints['quote']
+            params = {
+                'inputMint': 'So11111111111111111111111111111111111111112',  # SOL
+                'outputMint': token_address,
+                'amount': 1000000000,  # 1 SOL in lamports
+                'slippageBps': 50  # 0.5%
+            }
+            
+            headers = self.api_manager.get_headers_for_endpoint('jupiter_quote')
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    quote_url,
+                    params=params,
+                    headers=headers,
+                    timeout=self.config.API_TIMEOUT
+                ) as response:
+                    
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # Extract price info
+                        in_amount = int(data.get('inAmount', 0))
+                        out_amount = int(data.get('outAmount', 0))
+                        
+                        if in_amount > 0 and out_amount > 0:
+                            # Calculate price (tokens per SOL)
+                            tokens_per_sol = out_amount / in_amount
+                            price_usd = 0  # Would need SOL price to calculate
+                            
+                            return {
+                                'price_per_sol': tokens_per_sol,
+                                'price_usd': price_usd,
+                                'liquidity_available': True,
+                                'slippage_for_1_sol': data.get('priceImpactPct', 0),
+                                'route_plan': data.get('routePlan', [])
+                            }
+            
+            return {
+                'price_per_sol': 0,
+                'price_usd': 0,
+                'liquidity_available': False,
+                'slippage_for_1_sol': 100,
+                'route_plan': []
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get token info for {token_address}: {e}")
+            return {
+                'price_per_sol': 0,
+                'price_usd': 0,
+                'liquidity_available': False,
+                'slippage_for_1_sol': 100,
+                'route_plan': []
+            }
+    
     async def execute_user_trade(self, 
                                 user_id: str,
                                 action: str,  # 'buy' or 'sell'
@@ -619,3 +850,16 @@ if __name__ == "__main__":
             print(f"  Decimals: {token_info.decimals}")
     
     asyncio.run(test_engine())
+
+# Global trading engine instance
+_trading_engine = None
+
+async def get_trading_engine():
+    """Get global trading engine instance"""
+    global _trading_engine
+    if _trading_engine is None:
+        _trading_engine = EnhancedTradingEngine()
+    return _trading_engine
+
+# Alias for backward compatibility
+TradingEngine = EnhancedTradingEngine
