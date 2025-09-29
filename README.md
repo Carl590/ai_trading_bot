@@ -26,7 +26,7 @@ Start the bot with `/start` and access your **Personal Trading Dashboard** with 
 ### 🏆 **Best Trades** - Market Intelligence
 > *Discover the most profitable Solana trades in last 24 hours*
 
-- **📊 24-Hour Winners**: Top single trades from wallets by ROI in the last 24 hours
+- **📊 24-Hour Trades**: Best performing single trades from wallets in the last 24 hours ranked by highest ROI 
 
 
 ### � **Wallet Setup** - Secure & Simple
