@@ -1,13 +1,3 @@
-# 🤖 AI Trading Bot - Solana Edition
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Solana](https://img.shields.io/badge/Solana-Network-purple.svg)](https://solana.com/)
-
-> **Professional Telegram Trading Bot for Solana - Your Complete Automated Trading Solution**
-
-![Trading Bot Dashboard](./assets/logo.png)
-
 Transform your Solana trading with our cutting-edge AI-powered bot that delivers institutional-grade automation through a simple Telegram interface. From TradingView webhook integration to intelligent signal processing, this bot handles everything automatically while you maintain full control.
 
 ## 🎯 **How It Works**
