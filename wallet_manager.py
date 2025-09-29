@@ -110,7 +110,7 @@ class WalletManager:
             # Create wallet info
             wallet_info = WalletInfo(
                 user_id=user_id,
-                wallet_address=str(keypair.public_key),
+                wallet_address=str(keypair.pubkey()),
                 encrypted_private_key=encrypted_key,
                 wallet_name=wallet_name,
                 created_at=datetime.now().isoformat()
@@ -120,7 +120,7 @@ class WalletManager:
             self.user_wallets[user_id] = wallet_info
             self.save_wallets()
             
-            logger.info(f"Created new wallet for user {user_id}: {keypair.public_key}")
+            logger.info(f"Created new wallet for user {user_id}: {keypair.pubkey()}")
             
             # Return address and mnemonic-style backup
             return str(keypair.pubkey()), self._create_backup_phrase(bytes(keypair))

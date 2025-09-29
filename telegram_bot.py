@@ -20,8 +20,8 @@ from telegram.ext import (
     Application, CallbackQueryHandler, CommandHandler,
     ContextTypes, MessageHandler, filters
 )
-from solana.keypair import Keypair
-from solana.publickey import PublicKey
+from solders.keypair import Keypair
+from solders.pubkey import Pubkey
 from solana.rpc.api import Client
 import base64
 
@@ -61,7 +61,7 @@ class SolanaTrader:
         
     def load_wallet(self, private_key_json: List[int]) -> bool:
         try:
-            self.wallet = Keypair.from_secret_key(bytes(private_key_json))
+            self.wallet = Keypair.from_bytes(bytes(private_key_json))
             return True
         except Exception as e:
             logger.error(f"Failed to load wallet: {e}")
@@ -650,10 +650,10 @@ Send your private key now:
             if private_key_text.startswith('[') and private_key_text.endswith(']'):
                 # JSON array format
                 private_key_list = json.loads(private_key_text)
-                wallet = Keypair.from_secret_key(bytes(private_key_list))
+                wallet = Keypair.from_bytes(bytes(private_key_list))
             else:
                 # Assume base58 format
-                wallet = Keypair.from_secret_key(base64.b58decode(private_key_text))
+                wallet = Keypair.from_bytes(base64.b58decode(private_key_text))
             
             # Store the wallet
             self.user_wallets[user_id] = wallet

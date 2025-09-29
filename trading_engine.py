@@ -9,8 +9,8 @@ import logging
 import time
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
-from solana.keypair import Keypair
-from solana.publickey import PublicKey
+from solders.keypair import Keypair
+from solders.pubkey import Pubkey
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Commitment
 from solana.rpc.types import TxOpts
@@ -29,8 +29,6 @@ from datetime import datetime
 
 import requests
 import aiohttp
-from solana.keypair import Keypair
-from solana.publickey import PublicKey
 from solana.rpc.api import Client
 from solana.transaction import Transaction
 from solana.rpc.types import TxOpts
@@ -324,7 +322,7 @@ class EnhancedTradingEngine:
         # Prepare swap transaction
         swap_data = {
             "route": route,
-            "userPublicKey": str(wallet.public_key),
+            "userPublicKey": str(wallet.pubkey()),
             "wrapUnwrapSOL": True,
             "feeAccount": None,
             "asLegacyTransaction": True
