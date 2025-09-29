@@ -438,14 +438,66 @@ class SolanaTelegramScraper:
         try:
             logger.info(f"Executing auto-trade for {contract.address}")
             
-            # This would integrate with your trading engine
-            # For now, just log the action
-            logger.info(f"Auto-trade triggered for {contract.symbol} ({contract.address})")
+            # Import trading engine
+            from trading_engine import SolanaTradingEngine
+            from solana.keypair import Keypair
             
+            # Initialize trading engine
+            trading_engine = SolanaTradingEngine()
+            
+            # Get default wallet for auto-trading (you'll need to configure this)
+            # For security, this should be loaded from encrypted config
+            auto_trade_wallet = os.getenv('AUTO_TRADE_WALLET_PRIVATE_KEY')
+            if not auto_trade_wallet:
+                logger.warning("Auto-trade wallet not configured. Skipping trade.")
+                return
+            
+            # Create wallet from private key
+            wallet = Keypair.from_secret_key(bytes.fromhex(auto_trade_wallet))
+            
+            # Default buy amount (configurable)
+            buy_amount_sol = float(os.getenv('AUTO_TRADE_AMOUNT_SOL', '0.1'))
+            
+            # Execute buy order
+            result = await trading_engine.execute_trade(
+                wallet=wallet,
+                action='buy',
+                token_address=contract.address,
+                amount=buy_amount_sol,
+                slippage_bps=300  # 3% slippage for auto-trades
+            )
+            
+            if result.success:
+                logger.info(f"✅ Auto-trade successful: {contract.symbol} ({contract.address})")
+                logger.info(f"TX: {result.tx_signature}")
+                
+                # Notify main bot of successful trade
+                await self.notify_trade_success(contract, result)
+            else:
+                logger.error(f"❌ Auto-trade failed: {result.error}")
+                
         except Exception as e:
             logger.error(f"Error in auto-trade: {e}")
     
-    async def add_group(self, group_identifier: str, group_name: str = None) -> bool:
+    async def notify_trade_success(self, contract: SolanaContractInfo, trade_result):
+        """Notify main bot of successful auto-trade"""
+        try:
+            # This would send a notification to your main trading bot
+            message = f"🤖 AUTO-TRADE EXECUTED\n\n"
+            message += f"💎 Token: ${contract.symbol}\n"
+            message += f"📍 Address: {contract.address}\n"
+            message += f"🎯 Confidence: {contract.confidence_score:.2f}\n"
+            message += f"✅ Status: Success\n"
+            message += f"🔗 TX: {trade_result.tx_signature}\n"
+            message += f"⏱️ Execution: {trade_result.execution_time:.2f}s"
+            
+            logger.info(f"Trade notification: {message}")
+            # Add actual notification logic here (Telegram, Discord, etc.)
+            
+        except Exception as e:
+            logger.error(f"Error sending trade notification: {e}")
+    
+    async def add_group(self, group_identifier: str, group_name: str = None, auto_trade: bool = False, min_confidence: float = 0.8) -> bool:
         """Add a group to monitor"""
         try:
             # Get group entity
@@ -459,7 +511,9 @@ class SolanaTelegramScraper:
                 group_config = GroupConfig(
                     group_id=group_id,
                     group_name=group_name or getattr(entity, 'title', 'Unknown Group'),
-                    enabled=True
+                    enabled=True,
+                    auto_trade=auto_trade,
+                    min_confidence=min_confidence
                 )
                 
                 self.monitored_groups[group_id] = group_config

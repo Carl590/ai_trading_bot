@@ -17,7 +17,7 @@ class ScraperManager:
     def __init__(self):
         self.scraper = SolanaTelegramScraper()
     
-    async def add_group(self, group_link: str, group_name: str = None):
+    async def add_group(self, group_link: str, group_name: str = None, auto_trade: bool = False, min_confidence: float = 0.8):
         """Add a group to monitor"""
         print(f"Adding group: {group_link}")
         
@@ -25,10 +25,11 @@ class ScraperManager:
             # Connect to Telegram
             await self.scraper.client.start()
             
-            success = await self.scraper.add_group(group_link, group_name)
+            success = await self.scraper.add_group(group_link, group_name, auto_trade, min_confidence)
             
             if success:
-                print(f"✅ Successfully added group: {group_name or group_link}")
+                auto_msg = " (auto-trade enabled)" if auto_trade else ""
+                print(f"✅ Successfully added group: {group_name or group_link}{auto_msg}")
             else:
                 print(f"❌ Failed to add group: {group_link}")
             
@@ -157,11 +158,13 @@ class ScraperManager:
 
 async def main():
     """Main function with CLI interface"""
-    parser = argparse.ArgumentParser(description='Telegram Scraper Management')
+    parser = argparse.ArgumentParser(description='Solana Telegram Contract Scraper Manager')
     parser.add_argument('action', choices=['start', 'add-group', 'list-groups', 'contracts', 'stats'],
                       help='Action to perform')
     parser.add_argument('--group-link', help='Telegram group link or username')
     parser.add_argument('--group-name', help='Custom name for the group')
+    parser.add_argument('--auto-trade', action='store_true', help='Enable auto-trading for this group')
+    parser.add_argument('--min-confidence', type=float, default=0.8, help='Minimum confidence for auto-trade')
     parser.add_argument('--limit', type=int, default=20, help='Limit for contracts display')
     
     args = parser.parse_args()
@@ -176,7 +179,14 @@ async def main():
             if not args.group_link:
                 print("❌ Group link is required")
                 return
-            await manager.add_group(args.group_link, args.group_name)
+            
+            # Add auto-trade configuration
+            auto_trade_msg = ""
+            if args.auto_trade:
+                auto_trade_msg = f" with auto-trading (min confidence: {args.min_confidence})"
+            
+            print(f"Adding group{auto_trade_msg}...")
+            await manager.add_group(args.group_link, args.group_name, args.auto_trade, args.min_confidence)
         
         elif args.action == 'list-groups':
             await manager.list_groups()

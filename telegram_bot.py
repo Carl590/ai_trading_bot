@@ -25,6 +25,10 @@ from solana.publickey import PublicKey
 from solana.rpc.api import Client
 import base64
 
+# Import wallet management
+from wallet_manager import wallet_manager
+from wallet_setup import WalletSetupHandler
+
 # Import the comprehensive API manager
 from api_manager import api_manager, APIConfig
 
@@ -103,6 +107,9 @@ class TelegramTradingBot:
         self.user_wallets: Dict[int, Keypair] = {}
         self.user_positions: Dict[int, List[TradingPosition]] = {}
         self.ai_trading_enabled: Dict[int, bool] = {}
+        
+        # Initialize wallet handler
+        self.wallet_handler = WalletSetupHandler(self)
         
         # Store global reference for scraper alerts
         _global_bot_instance = self
@@ -216,7 +223,7 @@ Choose an option below:
         keyboard = [
             [InlineKeyboardButton("🤖 AI Trading Bot", callback_data="ai_trading")],
             [InlineKeyboardButton("🏆 Best Trades", callback_data="best_trades")],
-            [InlineKeyboardButton("👛 Wallet Setup", callback_data="wallet_setup")],
+            [InlineKeyboardButton("👛 Wallet Manager", callback_data="wallet_menu")],
             [InlineKeyboardButton("🔍 Contract Scraper", callback_data="scraper_menu")],
             [InlineKeyboardButton("❓ Help", callback_data="help")],
             [InlineKeyboardButton("🔄 Refresh", callback_data="main_menu")]
@@ -449,6 +456,22 @@ Choose an option below:
             await self.show_best_trades(update, context)
         elif data == "wallet_setup":
             await self.show_wallet_setup(update, context)
+        elif data == "wallet_menu":
+            await self.wallet_handler.show_wallet_menu(update, context)
+        elif data == "wallet_create_new":
+            await self.wallet_handler.create_new_wallet(update, context)
+        elif data == "wallet_import":
+            await self.wallet_handler.import_wallet_start(update, context)
+        elif data == "wallet_dashboard":
+            await self.wallet_handler.show_wallet_dashboard(update, context)
+        elif data == "wallet_refresh":
+            await self.wallet_handler.refresh_balance(update, context)
+        elif data == "wallet_export":
+            await self.wallet_handler.export_private_key(update, context)
+        elif data == "wallet_help":
+            await self.wallet_handler.show_wallet_help(update, context)
+        elif data.startswith("wallet_qr_"):
+            await self.wallet_handler.generate_deposit_qr(update, context)
         elif data == "help":
             await self.show_help(update, context)
         elif data == "scraper_menu":
@@ -590,6 +613,11 @@ Send your private key now:
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages (for wallet import, etc.)"""
+        # Check if user is importing wallet
+        if context.user_data.get('wallet_import'):
+            await self.wallet_handler.handle_private_key_input(update, context)
+            return
+        
         if context.user_data.get('awaiting_wallet_import'):
             await self.process_wallet_import(update, context)
         else:

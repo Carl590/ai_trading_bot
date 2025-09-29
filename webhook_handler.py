@@ -86,26 +86,15 @@ class WebhookTradeExecutor:
             return {"status": "error", "message": str(e)}
     
     async def execute_trade(self, user_id: str, action: str, token_address: str, amount: float = None) -> Dict[str, Any]:
-        """Execute a trading transaction using enhanced trading engine"""
+        """Execute a trading transaction using wallet manager and enhanced trading engine"""
         try:
             logger.info(f"Executing {action} for user {user_id}, token {token_address}")
             
-            # Get user wallet from config
-            user_config = self.config_manager.get_user_config(user_id)
-            if not user_config or not user_config.get('wallet_private_key'):
-                return {
-                    'success': False,
-                    'error': 'Wallet not configured for user'
-                }
-            
-            # Initialize wallet
-            wallet = Keypair.from_secret_key(user_config['wallet_private_key'])
-            
-            # Use enhanced trading engine for execution
+            # Use the new wallet manager system
             if action.lower() == 'buy':
                 amount = amount or 0.1  # Default buy amount in SOL
-                result = await trading_engine.execute_trade(
-                    wallet=wallet,
+                result = await trading_engine.execute_user_trade(
+                    user_id=user_id,
                     action='buy',
                     token_address=token_address,
                     amount=amount
@@ -113,8 +102,8 @@ class WebhookTradeExecutor:
             elif action.lower() == 'sell':
                 if amount is None:
                     return {'success': False, 'error': 'Amount required for sell orders'}
-                result = await trading_engine.execute_trade(
-                    wallet=wallet,
+                result = await trading_engine.execute_user_trade(
+                    user_id=user_id,
                     action='sell',
                     token_address=token_address,
                     amount=amount

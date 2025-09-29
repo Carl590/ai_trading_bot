@@ -1,7 +1,24 @@
 """
-Enhanced Trading Engine with Full API Integration
-Utilizes all available RPC endpoints, MEV protection, and Jupiter APIs
+Enhanced Solana Trading Engine
+Integrates with wallet manager for user wallets
 """
+
+import asyncio
+import json
+import logging
+import time
+from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass
+from solana.keypair import Keypair
+from solana.publickey import PublicKey
+from solana.rpc.async_api import AsyncClient
+from solana.rpc.commitment import Commitment
+from solana.rpc.types import TxOpts
+from solana.transaction import Transaction
+import aiohttp
+
+# Import wallet manager
+from wallet_manager import wallet_manager
 
 import asyncio
 import logging
@@ -539,6 +556,38 @@ class EnhancedTradingEngine:
                 health_status[f'mev_{endpoint.name.lower()}'] = False
         
         return health_status
+    
+    async def execute_user_trade(self, 
+                                user_id: str,
+                                action: str,  # 'buy' or 'sell'
+                                token_address: str,
+                                amount: float,
+                                slippage_bps: Optional[int] = None) -> TradeResult:
+        """Execute trade using user's wallet from wallet manager"""
+        try:
+            # Get user's keypair from wallet manager
+            user_keypair = wallet_manager.get_user_keypair(user_id)
+            if not user_keypair:
+                return TradeResult(False, error="User wallet not found. Please set up your wallet first.")
+            
+            # Update wallet activity
+            await wallet_manager.update_wallet_activity(user_id)
+            
+            # Execute the trade using the user's wallet
+            result = await self.execute_trade(
+                wallet=user_keypair,
+                action=action,
+                token_address=token_address,
+                amount=amount,
+                slippage_bps=slippage_bps
+            )
+            
+            logger.info(f"User {user_id} {action} trade result: {result.success}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error executing user trade: {e}")
+            return TradeResult(False, error=str(e))
 
 # Global instance
 trading_engine = EnhancedTradingEngine()
